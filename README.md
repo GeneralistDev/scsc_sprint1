@@ -5,11 +5,10 @@ Swinburne Cyber Security Club code sprint #1 chat server.
 
 
 # Maintainers
-=Daniel Parker=
-Email: [dparker.tech@gmail.com](mailto:dparker.tech@gmail.com)
-github: rlgod
-Website: [http://danielparker.me](http://danielparker.me/)
-============
+## Daniel Parker
+* Email: [dparker.tech@gmail.com](mailto:dparker.tech@gmail.com)
+* github: rlgod
+* Website: [http://danielparker.me](http://danielparker.me/)
 
 # Contributing
 ## 1. Create a Branch
@@ -26,19 +25,19 @@ All pull requests will be deleted as the correct way to get your code into maste
 # Patches
 ## Creating Patches
 1. Commit locally
-'''git commit -m "Verbose commit message"'''
+    git commit -m "Verbose commit message"
 2. Create a patch with reference to master (you should make sure your copy of master is up to date before doing this)
-'''git format-patch master --stdout > your_patch_name.patch'''
+    git format-patch master --stdout > your_patch_name.patch
 
 ## Applying a Patch
 1. Obtain the .patch file to apply
 2. View the patch stats (optional)
-'''git apply --stat your_patch_name.patch'''
+    git apply --stat your_patch_name.patch
 3. Check to see if applying the patch will cause any issues
-'''git apply --check your_patch_name.patch'''
+    git apply --check your_patch_name.patch
 4. Fully apply the patch (with signoff)
-'''git am --signoff < your_patch_name.patch'''
+    git am --signoff < your_patch_name.patch
 
 # Building
 Please use the build script in the root directory to build the program if you can. All extra gcc flags should be added to the script if necessary so that all developers use it when building.
-'''./build.sh'''
+    ./build.sh
