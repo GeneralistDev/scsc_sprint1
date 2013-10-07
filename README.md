@@ -47,7 +47,7 @@ git apply --check your_patch_name.patch
 ```
 git am --signoff < your_patch_name.patch
 ```
-# Building
+## Building
 Please use the makefile in the root directory to build the program if you can. All extra gcc flags should be added to the makefile if necessary so that all developers use it when building.
 Build:
 ```
