@@ -36,7 +36,9 @@ int main(void)
     socklen_t addrlen;
 
     char buf[256];    // buffer for client data
+    char no_message[] = "Computer says no.";
     int nbytes;
+    int bytecount;
 
     char remoteIP[INET6_ADDRSTRLEN];
 
@@ -115,6 +117,15 @@ int main(void)
 
                     if (newfd == -1) {
                         perror("accept");
+                    } else if (recv(newfd, buf, sizeof buf, 0) <= 0){
+                        perror("recv-1");
+                    } else
+                    {
+                        if (send(newfd, no_message, sizeof no_message, 0) == -1)
+                        {
+                            perror("send no_message");
+                        }
+                        close(newfd);
                     } else {
                         FD_SET(newfd, &master); // add to master set
                         if (newfd > fdmax) {    // keep track of the max
