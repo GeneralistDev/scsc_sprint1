@@ -49,12 +49,14 @@ git am --signoff < your_patch_name.patch
 ```
 
 # Building
-Please use the makefile in the root directory to build the program if you can. All extra gcc flags should be added to the makefile if necessary so that all developers use it when building.
+Please use the makefile in the root directory to build the program if you can. All extra gcc flags should be added to the makefile if necessary so that all developers use it when building. The binary is created in the ```bin/``` directory.
+
 Build:
 ```
 make
 ```
+
 Clean:
-'''
+```
 make clean
-'''
+```
