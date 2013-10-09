@@ -30,20 +30,28 @@ void *get_in_addr(struct sockaddr *sa)
 /* Compare's entered key with secret key and returns TRUE if same */
 bool key_auth(char* entered_key)
 {
+    printf("Authorising user with key: %s\n", entered_key);
     FILE *fp;
     char key[256];
-    fp = fopen ("key.txt","r");
+    fp = fopen("bin/key.txt","r");
     if (fp == NULL) 
     {
         printf ("File not created okay, errno = %d\n", errno);
-        return 1;
+        return FALSE;
     } else
     {
+        printf("Scanning file\n");
         fscanf(fp, "%s", key);      // Would normally check for error when reading from file
-        if (strcmp(entered_key, key) != 0)
+        printf("key: %s\n", key);
+        int keydiff;
+        if (keydiff = strcmp(entered_key, key) != 0)
+        {
+            printf("Key was incorrect by: %i\n", keydiff);
             return FALSE;
-        else
+        } else {
+            printf("Key was correct\n");
             return TRUE;
+        }
     }
     fclose (fp);
 }
@@ -66,14 +74,17 @@ int main(int argc, char* argv[])
     fd_set master;    // master file descriptor list
     fd_set read_fds;  // temp file descriptor list for select()
     fd_set pending_fds; // Pre-authenticated connections
+    fd_set readpending_fds;
     int fdmax;        // maximum file descriptor number. Old closed connections are reused but fdmax stays as the max number ever connected
+    int pendingmax;
     int listener;     // listening socket descriptor
     int newfd;        // newly accept()ed socket descriptor
     struct sockaddr_storage remoteaddr; // client address
     socklen_t addrlen;
+    struct timeval timeout;
+    
 
     char buf[256];    // buffer for client data
-    char no_message[] = "Computer says no.";
     int nbytes;
     int bytecount;
 
@@ -87,7 +98,7 @@ int main(int argc, char* argv[])
     FD_ZERO(&master);    // clear the master and temp sets
     FD_ZERO(&read_fds);
     FD_ZERO(&pending_fds);
-
+    FD_ZERO(&readpending_fds);
 
 
     // get us a socket and bind it
@@ -133,35 +144,35 @@ int main(int argc, char* argv[])
 
     // add the listener to the master set
     FD_SET(listener, &master);
-
-    FD_SET(listener, &pending_fds);
-    FD_CLR(listener, &pending_fds);
-
+    pending_fds = master;
     // keep track of the biggest file descriptor
     fdmax = listener; // so far, it's this one
+    pendingmax = listener;
 
     // main loop
     for(;;) {
+        timeout.tv_sec=0;
+        timeout.tv_usec=500;
         read_fds = master; // copy it
-
+        readpending_fds = pending_fds;
         /* Modifies &read_fds to only have connections that are still 
         connected and drops those that are no longer connected */
-        if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
+        if (select(fdmax+1, &read_fds, NULL, NULL, &timeout) == -1) {
             perror("select");
             exit(4);
         }
-
-        if (select(fdmax+1, &pending_fds, NULL, NULL, NULL) == -1) {
+        if (select(fdmax+1, &readpending_fds, NULL, NULL, &timeout) == -1) {
             perror("select");
             exit(4);
         }
 
         // run through the existing connections looking for data to read
         for(i = 0; i <= fdmax; i++) {
-            if (FD_ISSET(i, &pending_fds)) {
-                currentpendingfd = i;
-                if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
+            if (FD_ISSET(i, &readpending_fds)) {
+                if (i == listener){
+                } else if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
                     // got error or connection closed by client
+                    printf("buffer: %s\n", buf);
                     if (nbytes == 0) {
                         // connection closed
                         printf("selectserver: socket %d hung up\n", i);
@@ -171,19 +182,26 @@ int main(int argc, char* argv[])
                     close(i); // bye!
                     FD_CLR(i, &pending_fds); // remove from master set
                 } else {
-                    if (key_auth(buf)){
-                        char authstring[] = "Thank you for joining";
+                    currentpendingfd = i;
+                    buf[nbytes-2] = '\0';
+                    if (key_auth(buf) == 1){
+                        char authstring[] = "Thank you for joining\n";
                         FD_SET(i, &master);
+                        if (i > fdmax)
+                        {
+                            fdmax = i;
+                        }
                         FD_CLR(i, &pending_fds);
                         send(i, authstring, sizeof authstring, 0);
                     } else {
-                        char noauthstring[] = "Wrong password sir";
+                        char noauthstring[] = "Wrong password sorry\n";
                         send(i, noauthstring, sizeof noauthstring, 0);
                         FD_CLR(i, &pending_fds);
+                        close(i);
                     }
                 }
             }
-
+            
             if (FD_ISSET(i, &read_fds)) { // we got one!!
                 if (i == listener) {
                     // handle new connections
@@ -208,6 +226,7 @@ int main(int argc, char* argv[])
                                 remoteIP, INET6_ADDRSTRLEN),
                             newfd);
                     }
+
                 } else {
                     // handle data from a client
                     if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
@@ -234,10 +253,9 @@ int main(int argc, char* argv[])
                             }
                         }
                     }
-                } // END handle data from client
+                } // END handle data from client   
             } // END got new incoming connection
         } // END looping through file descriptors
     } // END for(;;)--and you thought it would never end!
-    
     return 0;
 }
