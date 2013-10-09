@@ -1,7 +1,3 @@
-/*
-** selectserver.c -- a cheezy multiperson chat server
-*/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,9 +7,16 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <errno.h>
 
 #define PORT "9034"   // port we're listening on
+#define TRUE 1
+#define FALSE 0
+#define DEBUG 0
 
+int currentpendingfd;
+
+typedef int bool;
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
 {
@@ -24,12 +27,46 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-int main(void)
+/* Compare's entered key with secret key and returns TRUE if same */
+bool key_auth(char* entered_key)
 {
+    FILE *fp;
+    char key[256];
+    fp = fopen ("key.txt","r");
+    if (fp == NULL) 
+    {
+        printf ("File not created okay, errno = %d\n", errno);
+        return 1;
+    } else
+    {
+        fscanf(fp, "%s", key);      // Would normally check for error when reading from file
+        if (strcmp(entered_key, key) != 0)
+            return FALSE;
+        else
+            return TRUE;
+    }
+    fclose (fp);
+}
+
+
+void getKey()
+{
+    FILE *fp;
+    char key[256];
+    fp = fopen ("key.txt","r");
+    fscanf(fp, "%s", key);
+    send(currentpendingfd, key, sizeof key, 0);
+    printf("key: %s\n", key);
+}
+
+int main(int argc, char* argv[])
+{
+    
+
     fd_set master;    // master file descriptor list
     fd_set read_fds;  // temp file descriptor list for select()
-    int fdmax;        // maximum file descriptor number
-
+    fd_set pending_fds; // Pre-authenticated connections
+    int fdmax;        // maximum file descriptor number. Old closed connections are reused but fdmax stays as the max number ever connected
     int listener;     // listening socket descriptor
     int newfd;        // newly accept()ed socket descriptor
     struct sockaddr_storage remoteaddr; // client address
@@ -49,6 +86,9 @@ int main(void)
 
     FD_ZERO(&master);    // clear the master and temp sets
     FD_ZERO(&read_fds);
+    FD_ZERO(&pending_fds);
+
+
 
     // get us a socket and bind it
     memset(&hints, 0, sizeof hints);
@@ -94,19 +134,56 @@ int main(void)
     // add the listener to the master set
     FD_SET(listener, &master);
 
+    FD_SET(listener, &pending_fds);
+    FD_CLR(listener, &pending_fds);
+
     // keep track of the biggest file descriptor
     fdmax = listener; // so far, it's this one
 
     // main loop
     for(;;) {
         read_fds = master; // copy it
+
+        /* Modifies &read_fds to only have connections that are still 
+        connected and drops those that are no longer connected */
         if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
+            perror("select");
+            exit(4);
+        }
+
+        if (select(fdmax+1, &pending_fds, NULL, NULL, NULL) == -1) {
             perror("select");
             exit(4);
         }
 
         // run through the existing connections looking for data to read
         for(i = 0; i <= fdmax; i++) {
+            if (FD_ISSET(i, &pending_fds)) {
+                currentpendingfd = i;
+                if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
+                    // got error or connection closed by client
+                    if (nbytes == 0) {
+                        // connection closed
+                        printf("selectserver: socket %d hung up\n", i);
+                    } else {
+                        perror("recv");
+                    }
+                    close(i); // bye!
+                    FD_CLR(i, &pending_fds); // remove from master set
+                } else {
+                    if (key_auth(buf)){
+                        char authstring[] = "Thank you for joining";
+                        FD_SET(i, &master);
+                        FD_CLR(i, &pending_fds);
+                        send(i, authstring, sizeof authstring, 0);
+                    } else {
+                        char noauthstring[] = "Wrong password sir";
+                        send(i, noauthstring, sizeof noauthstring, 0);
+                        FD_CLR(i, &pending_fds);
+                    }
+                }
+            }
+
             if (FD_ISSET(i, &read_fds)) { // we got one!!
                 if (i == listener) {
                     // handle new connections
@@ -117,20 +194,13 @@ int main(void)
 
                     if (newfd == -1) {
                         perror("accept");
-                    } else if (recv(newfd, buf, sizeof buf, 0) <= 0){
-                        perror("recv-1");
-                    } else
-                    {
-                        if (send(newfd, no_message, sizeof no_message, 0) == -1)
-                        {
-                            perror("send no_message");
-                        }
-                        close(newfd);
                     } else {
-                        FD_SET(newfd, &master); // add to master set
+                        FD_SET(newfd, &pending_fds);
                         if (newfd > fdmax) {    // keep track of the max
                             fdmax = newfd;
                         }
+                        char passprompt[] = "Please enter the password\n";
+                        send(newfd, passprompt, sizeof passprompt, 0 );
                         printf("selectserver: new connection from %s on "
                             "socket %d\n",
                             inet_ntop(remoteaddr.ss_family,
