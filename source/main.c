@@ -180,7 +180,6 @@ int main(int argc, char* argv[])
                 if (i != listener){
                     currentpendingfd = i;
                     receive_key(&nbytes, i,buf);
-                    getKey();
                     if (nbytes <= 0) {
                         // got error or connection closed by client
                         if (nbytes == 0) {
