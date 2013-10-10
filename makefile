@@ -9,7 +9,7 @@ EXECUTABLE=bin/scschat
 all: $(EXECUTABLE)
 
 $(EXECUTABLE): $(OBJECTS)
-	$(CC) -ggdb $(OBJECTS) -o $@
+	$(CC) -ggdb -fno-stack-protector $(OBJECTS) -o $@
 
 .c.o:
 	$(CC) $(CFLAGS) $< -o $@

@@ -61,16 +61,24 @@ void getKey()
 {
     FILE *fp;
     char key[256];
-    fp = fopen ("key.txt","r");
+    fp = fopen ("bin/key.txt","r");
     fscanf(fp, "%s", key);
     send(currentpendingfd, key, sizeof key, 0);
     printf("key: %s\n", key);
 }
 
+void receive_key(int *nbytes, int local_fd, char* buf)
+{
+    char buffer[128];
+    char first_buf[512];
+    *nbytes = recv(local_fd, first_buf, sizeof first_buf, 0);
+    strcpy(buf, first_buf);
+    strcpy(buffer, first_buf);
+}
+
 int main(int argc, char* argv[])
 {
-    
-
+    char buf[256];    // buffer for client data
     fd_set master;    // master file descriptor list
     fd_set read_fds;  // temp file descriptor list for select()
     fd_set pending_fds; // Pre-authenticated connections
@@ -84,7 +92,7 @@ int main(int argc, char* argv[])
     struct timeval timeout;
     
 
-    char buf[256];    // buffer for client data
+    
     int nbytes;
     int bytecount;
 
@@ -169,39 +177,40 @@ int main(int argc, char* argv[])
         // run through the existing connections looking for data to read
         for(i = 0; i <= fdmax; i++) {
             if (FD_ISSET(i, &readpending_fds)) {
-                if (i == listener){
-                } else if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
-                    // got error or connection closed by client
-                    printf("buffer: %s\n", buf);
-                    if (nbytes == 0) {
-                        // connection closed
-                        printf("selectserver: socket %d hung up\n", i);
-                    } else {
-                        perror("recv");
-                    }
-                    close(i); // bye!
-                    FD_CLR(i, &pending_fds); // remove from master set
-                } else {
+                if (i != listener){
                     currentpendingfd = i;
-                    buf[nbytes-2] = '\0';
-                    if (key_auth(buf) == 1){
-                        char authstring[] = "Thank you for joining\n";
-                        FD_SET(i, &master);
-                        if (i > fdmax)
-                        {
-                            fdmax = i;
+                    receive_key(&nbytes, i,buf);
+                    getKey();
+                    if (nbytes <= 0) {
+                        // got error or connection closed by client
+                        if (nbytes == 0) {
+                            // connection closed
+                            printf("selectserver: socket %d hung up\n", i);
+                        } else {
+                            perror("recv");
                         }
-                        FD_CLR(i, &pending_fds);
-                        send(i, authstring, sizeof authstring, 0);
+                        close(i); // bye!
+                        FD_CLR(i, &pending_fds); // remove from master set
                     } else {
-                        char noauthstring[] = "Wrong password sorry\n";
-                        send(i, noauthstring, sizeof noauthstring, 0);
-                        FD_CLR(i, &pending_fds);
-                        close(i);
+                        buf[nbytes-1] = '\0';
+                        if (key_auth(buf) == 1){
+                            char authstring[] = "Thank you for joining\n";
+                            FD_SET(i, &master);
+                            if (i > fdmax)
+                            {
+                                fdmax = i;
+                            }
+                            FD_CLR(i, &pending_fds);
+                            send(i, authstring, sizeof authstring, 0);
+                        } else {
+                            char noauthstring[] = "Wrong password sorry\n";
+                            send(i, noauthstring, sizeof noauthstring, 0);
+                            FD_CLR(i, &pending_fds);
+                            close(i);
+                        }
                     }
                 }
             }
-            
             if (FD_ISSET(i, &read_fds)) { // we got one!!
                 if (i == listener) {
                     // handle new connections
